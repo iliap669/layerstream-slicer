@@ -15,6 +15,7 @@ class StreamState(str, Enum):
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
+    SWAPPING = "swapping"
     FINISHED = "finished"
     STOPPED = "stopped"
     ERROR = "error"

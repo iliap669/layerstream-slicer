@@ -8,57 +8,177 @@
   </head>
   <body>
     <header>
-      <h1>LayerStream Slicer</h1>
-      <p>Layer-by-layer streaming for Creality V3 KE · mid-print model swap</p>
-    </header>
-    <main>
-      <section>
-        <h2>Model</h2>
-        <label for="model-file">Original STL / 3MF</label>
-        <input id="model-file" type="file" accept=".stl,.3mf" />
-        <div class="row">
-          <button id="upload-btn" type="button">Upload</button>
-        </div>
-        <label for="layer-count">Stub layer count (used if no engine)</label>
-        <input id="layer-count" type="number" min="1" value="20" />
-        <label for="layer-height">Layer height (mm)</label>
-        <input id="layer-height" type="number" min="0.04" step="0.02" value="0.2" />
+      <div>
+        <h1>LayerStream Slicer</h1>
+        <p>Ender-3 V3 KE · New print, then revise mid-print without reprinting what’s already down</p>
+      </div>
+      <div class="printer-bar">
+        <label for="printer-host">Printer IP</label>
+        <input id="printer-host" type="text" value="192.168.68.72" spellcheck="false" />
         <label for="transport">Transport</label>
         <select id="transport">
-          <option value="fake" selected>Fake dry-run</option>
-          <option value="moonraker">Moonraker (Klipper)</option>
+          <option value="auto" selected>Auto (Moonraker, then Creality)</option>
+          <option value="creality">CrealityPrint (stock firmware, :9999)</option>
+          <option value="moonraker">Moonraker (:7125)</option>
           <option value="serial">Serial</option>
+          <option value="fake">Fake dry-run</option>
         </select>
-        <label for="moonraker-host">Moonraker host</label>
-        <input id="moonraker-host" type="text" value="http://127.0.0.1:7125" />
-        <label for="serial-port">Serial port</label>
-        <input id="serial-port" type="text" value="/dev/ttyUSB0" />
-        <div class="row">
-          <button id="start-btn" type="button">Start print</button>
-          <button id="pause-btn" class="secondary" type="button">Pause</button>
-          <button id="resume-btn" class="secondary" type="button">Resume</button>
-        </div>
-        <label for="revised-file">Revised model (swap)</label>
-        <input id="revised-file" type="file" accept=".stl,.3mf" />
-        <label for="from-layer">Swap from layer N</label>
-        <input id="from-layer" type="number" min="1" value="8" />
-        <div class="row">
-          <button id="diff-btn" class="secondary" type="button">Diff only</button>
-          <button id="swap-btn" type="button">Swap model</button>
+        <label for="serial-port" class="sr-only">Serial port</label>
+        <input id="serial-port" type="text" value="COM3" placeholder="COM3 or /dev/ttyUSB0" />
+        <button id="test-btn" type="button">Test connection</button>
+        <div id="connection-status" class="connection idle">Not tested</div>
+      </div>
+    </header>
+
+    <nav class="steps" aria-label="Workflow">
+      <button id="tab-new" class="step active" type="button" data-tab="new">1. New print</button>
+      <button id="tab-revise" class="step" type="button" data-tab="revise">2. Revise</button>
+    </nav>
+
+    <main>
+      <section id="panel-new" class="panel">
+        <div class="workspace">
+          <div class="preview-pane">
+            <div class="preview-header">
+              <h2>Build plate <span class="muted">220 × 220 mm</span></h2>
+              <div class="row tight">
+                <label for="preview-layer">Layer</label>
+                <input id="preview-layer" type="number" min="1" value="1" />
+                <button id="preview-btn" class="secondary" type="button">Mesh slice</button>
+                <button id="preview-gcode-btn" class="secondary" type="button">G-code</button>
+              </div>
+            </div>
+            <div id="viewer" aria-label="3D build-plate preview"></div>
+            <canvas id="preview" width="640" height="220" aria-label="Layer cross-section"></canvas>
+          </div>
+          <aside class="settings-pane">
+            <h2>Model</h2>
+            <label for="model-file">STL / 3MF</label>
+            <input id="model-file" type="file" accept=".stl,.3mf" />
+            <div class="row">
+              <button id="upload-btn" type="button">Load model</button>
+            </div>
+            <p id="model-meta" class="muted">No model loaded.</p>
+
+            <details open>
+              <summary>Quality</summary>
+              <label>Layer height (mm) <input id="s-layer_height" type="number" step="0.02" min="0.08" /></label>
+              <label>First layer height <input id="s-first_layer_height" type="number" step="0.02" min="0.08" /></label>
+              <label>Line width <input id="s-line_width" type="number" step="0.01" /></label>
+              <label>Inner wall width <input id="s-inner_wall_line_width" type="number" step="0.01" /></label>
+              <label>Outer wall width <input id="s-outer_wall_line_width" type="number" step="0.01" /></label>
+              <label>Walls <input id="s-wall_loops" type="number" min="1" step="1" /></label>
+              <label>Top layers <input id="s-top_shell_layers" type="number" min="0" step="1" /></label>
+              <label>Bottom layers <input id="s-bottom_shell_layers" type="number" min="0" step="1" /></label>
+            </details>
+            <details>
+              <summary>Infill</summary>
+              <label>Density (%) <input id="s-sparse_infill_density" type="number" min="0" max="100" step="1" /></label>
+              <label>Pattern
+                <select id="s-sparse_infill_pattern">
+                  <option value="gyroid">Gyroid</option>
+                  <option value="grid">Grid</option>
+                  <option value="triangles">Triangles</option>
+                  <option value="cubic">Cubic</option>
+                  <option value="lightning">Lightning</option>
+                  <option value="lines">Lines</option>
+                </select>
+              </label>
+            </details>
+            <details>
+              <summary>Speeds (mm/s)</summary>
+              <label>Outer wall <input id="s-outer_wall_speed" type="number" step="5" /></label>
+              <label>Inner wall <input id="s-inner_wall_speed" type="number" step="5" /></label>
+              <label>Solid infill <input id="s-internal_solid_infill_speed" type="number" step="5" /></label>
+              <label>Sparse infill <input id="s-sparse_infill_speed" type="number" step="5" /></label>
+              <label>Gap infill <input id="s-gap_infill_speed" type="number" step="5" /></label>
+              <label>Bridge <input id="s-bridge_speed" type="number" step="5" /></label>
+              <label>First layer <input id="s-first_layer_speed" type="number" step="5" /></label>
+              <label>Travel <input id="s-travel_speed" type="number" step="5" /></label>
+            </details>
+            <details>
+              <summary>Temperatures</summary>
+              <label>Nozzle (°C) <input id="s-nozzle_temperature" type="number" step="1" /></label>
+              <label>Bed (°C) <input id="s-bed_temperature" type="number" step="1" /></label>
+              <label>First-layer nozzle <input id="s-first_layer_nozzle_temperature" type="number" step="1" /></label>
+              <label>First-layer bed <input id="s-first_layer_bed_temperature" type="number" step="1" /></label>
+            </details>
+            <details>
+              <summary>Cooling</summary>
+              <label>Fan speed (%) <input id="s-fan_speed" type="number" min="0" max="100" step="5" /></label>
+              <label>Min fan (%) <input id="s-fan_speed_min" type="number" min="0" max="100" step="5" /></label>
+              <label>Closed-fan first layers <input id="s-close_fan_first_layers" type="number" min="0" step="1" /></label>
+            </details>
+            <details>
+              <summary>Support</summary>
+              <label class="check"><input id="s-enable_support" type="checkbox" /> Enable supports</label>
+              <label>Overhang threshold (°) <input id="s-support_threshold_angle" type="number" step="1" /></label>
+              <label>Pattern
+                <select id="s-support_pattern">
+                  <option value="zigzag">Zig-zag</option>
+                  <option value="grid">Grid</option>
+                  <option value="lines">Lines</option>
+                </select>
+              </label>
+              <label>Density (%) <input id="s-support_density" type="number" min="0" max="100" step="1" /></label>
+            </details>
+            <details>
+              <summary>Adhesion</summary>
+              <label>Type
+                <select id="s-brim_type">
+                  <option value="brim">Brim</option>
+                  <option value="skirt">Skirt</option>
+                  <option value="none">None</option>
+                </select>
+              </label>
+              <label>Brim width (mm) <input id="s-brim_width" type="number" step="0.5" /></label>
+              <label>Skirt loops <input id="s-skirt_loops" type="number" min="0" step="1" /></label>
+            </details>
+            <details>
+              <summary>Retraction</summary>
+              <label>Length (mm) <input id="s-retraction_length" type="number" step="0.05" /></label>
+              <label>Speed (mm/s) <input id="s-retraction_speed" type="number" step="1" /></label>
+              <label>Wipe (mm) <input id="s-wipe_distance" type="number" step="0.1" /></label>
+            </details>
+            <label class="muted">Stub layer count (used if no CuraEngine)
+              <input id="layer-count" type="number" min="1" value="20" />
+            </label>
+            <div class="row">
+              <button id="slice-btn" class="secondary" type="button">Slice</button>
+              <button id="start-btn" type="button">Send to print</button>
+            </div>
+            <div class="row">
+              <button id="pause-btn" class="secondary" type="button">Pause</button>
+              <button id="resume-btn" class="secondary" type="button">Resume</button>
+            </div>
+          </aside>
         </div>
       </section>
-      <section>
-        <h2>Layer preview</h2>
-        <label for="preview-layer">Layer</label>
-        <input id="preview-layer" type="number" min="1" value="1" />
-        <div class="row">
-          <button id="preview-btn" class="secondary" type="button">Mesh</button>
-          <button id="preview-gcode-btn" class="secondary" type="button">G-code</button>
-          <button id="preview-revised-btn" class="secondary" type="button">Revised mesh</button>
+
+      <section id="panel-revise" class="panel hidden">
+        <div class="workspace">
+          <div class="preview-pane">
+            <h2>Revision preview</h2>
+            <p class="muted">The first changed layer is drawn as a coloured band on the plate. Changed regions are highlighted.</p>
+            <div id="revise-viewer" aria-label="Revised model preview with change highlight"></div>
+            <div id="revise-summary" class="report">Load a revised STL or 3MF to compare it with the job that’s printing.</div>
+            <div class="row">
+              <button id="apply-btn" type="button" disabled>Apply changes</button>
+            </div>
+          </div>
+          <aside class="settings-pane">
+            <h2>Revised model</h2>
+            <label for="revised-file">Upload revised STL / 3MF</label>
+            <input id="revised-file" type="file" accept=".stl,.3mf" />
+            <div class="row">
+              <button id="revise-btn" type="button">Compare models</button>
+            </div>
+            <p class="muted">Apply only replaces G-code that has not been printed yet (layers at or above the first change, with a lookahead safety margin). It is refused if the change starts in an already-printed layer. Plate position is verified against the original placement; a pure XY shift is auto-corrected, otherwise Apply is blocked.</p>
+          </aside>
         </div>
-        <canvas id="preview" width="640" height="640" aria-label="Layer cross-section preview"></canvas>
       </section>
-      <section>
+
+      <section class="status-pane">
         <h2>Status</h2>
         <p>State: <span id="state" class="badge idle">idle</span></p>
         <dl>
@@ -67,14 +187,21 @@
           <dt>Swaps</dt><dd id="swap-count">0</dd>
           <dt>Queue</dt><dd id="queue-depth">0</dd>
           <dt>Slicer</dt><dd id="slicer-name">—</dd>
-          <dt>Transport</dt><dd id="transport-name">fake</dd>
+          <dt>Transport</dt><dd id="transport-name">—</dd>
         </dl>
-        <h2>Diff report</h2>
-        <div id="diff-report" class="report">Upload a revised model and click Diff only, or Swap.</div>
         <h2>Log</h2>
         <div id="log"></div>
       </section>
     </main>
-    <script src="/static/app.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="/static/app.js"></script>
   </body>
 </html>

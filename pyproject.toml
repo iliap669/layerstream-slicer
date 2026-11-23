@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "layerstream-slicer"
-version = "0.2.0"
+version = "0.3.0"
 description = "Web-based layer-by-layer G-code slicer that streams to a Creality V3 KE (Klipper) and supports mid-print model swaps."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,7 +30,7 @@ dev = [
 ]
 
 [project.scripts]
-layerstream-slicer = "layerstream_slicer.api.app:main"
+layerstream-slicer = "layerstream_slicer.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

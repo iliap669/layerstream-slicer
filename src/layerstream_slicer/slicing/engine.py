@@ -29,13 +29,17 @@ class EngineInfo:
 
 
 def find_engine() -> EngineInfo | None:
-    """Locate a slicer CLI, honoring LAYERSTREAM_ENGINE / CURAENGINE env vars."""
+    """Locate a slicer CLI, honoring LAYERSTREAM_ENGINE / CURAENGINE env vars.
+
+    On Windows, also searches ``C:\\Program Files\\UltiMaker Cura *\\CuraEngine.exe``
+    (and the ``(x86)`` / Ultimaker-spelling variants) so a stock Cura 5.14
+    install is found without setting CURAENGINE.
+    """
     override = os.environ.get("LAYERSTREAM_ENGINE") or os.environ.get("CURAENGINE")
     if override:
         path = Path(override).expanduser()
-        if path.is_file() and os.access(path, os.X_OK):
-            kind = _classify(path)
-            return EngineInfo(name=path.name, executable=path, kind=kind)
+        if _is_runnable(path):
+            return EngineInfo(name=path.name, executable=path, kind=_classify(path))
     for name, kind in (
         ("CuraEngine", "curaengine"),
         ("curaengine", "curaengine"),
@@ -48,7 +52,125 @@ def find_engine() -> EngineInfo | None:
         found = shutil.which(name)
         if found:
             return EngineInfo(name=name, executable=Path(found), kind=kind)
+    for path in windows_cura_engine_candidates():
+        if _is_runnable(path):
+            return EngineInfo(name=path.name, executable=path, kind="curaengine")
     return None
+
+
+def _is_runnable(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    if os.access(path, os.X_OK):
+        return True
+    # Windows marks most .exe files as not POSIX-executable when this code is
+    # unit-tested on Linux with a stub named CuraEngine.exe; accept .exe anyway.
+    return path.suffix.lower() == ".exe"
+
+
+def windows_cura_engine_candidates() -> list[Path]:
+    """CuraEngine.exe paths under Program Files / a test override root."""
+    found: list[Path] = []
+    for root in _program_files_roots():
+        if not root.is_dir():
+            continue
+        for pattern in ("UltiMaker Cura *", "Ultimaker Cura *", "UltiMaker Cura*", "Ultimaker Cura*"):
+            matches = sorted(root.glob(pattern), key=lambda p: p.name, reverse=True)
+            for directory in matches:
+                for rel in ("CuraEngine.exe", "CuraEngine", Path("bin") / "CuraEngine.exe", Path("bin") / "CuraEngine"):
+                    candidate = directory / rel
+                    if candidate.is_file():
+                        found.append(candidate)
+    return found
+
+
+def _program_files_roots() -> list[Path]:
+    roots: list[Path] = []
+    override = os.environ.get("LAYERSTREAM_PROGRAM_FILES")
+    if override:
+        roots.append(Path(override).expanduser())
+    for key in ("ProgramFiles", "ProgramFiles(x86)", "PROGRAMFILES", "PROGRAMFILES(X86)"):
+        value = os.environ.get(key)
+        if value:
+            roots.append(Path(value))
+    if os.name == "nt":
+        roots.extend([Path(r"C:\Program Files"), Path(r"C:\Program Files (x86)")])
+    # Unique, keep order.
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for root in roots:
+        if root not in seen:
+            seen.add(root)
+            unique.append(root)
+    return unique
+
+
+def cura_resource_dirs(engine: Path | None = None) -> list[Path]:
+    """Definition / extruder directories for CURA_ENGINE_SEARCH_PATH.
+
+    CuraEngine 5.14 must see the official ``fdmprinter.def.json`` plus the
+    Creality base definitions shipped under
+    ``<Cura>/share/cura/resources/definitions``. Vendored 5.0 defs are
+    appended as a fallback (and are what Debian's CuraEngine 5.0 uses).
+    """
+    dirs: list[Path] = []
+    roots: list[Path] = []
+    if engine is not None:
+        roots.extend([engine.parent, engine.parent.parent])
+        if engine.parent.name.lower() in {"bin", "usr"}:
+            roots.append(engine.parent.parent / "share" / "cura")
+    roots.append(Path("/usr/share/cura"))
+    rels = (
+        Path("share") / "cura" / "resources" / "definitions",
+        Path("share") / "cura" / "resources" / "extruders",
+        Path("resources") / "definitions",
+        Path("resources") / "extruders",
+        Path("resources"),
+    )
+    for root in roots:
+        for rel in rels:
+            path = root / rel
+            if path.is_dir():
+                dirs.append(path)
+        # engine sitting next to share/cura/...
+        direct = root / "share" / "cura" / "resources" / "definitions"
+        if direct.is_dir():
+            dirs.append(direct)
+    dirs.append(RESOURCES)
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for path in dirs:
+        resolved = path.resolve() if path.exists() else path
+        if resolved not in seen:
+            seen.add(resolved)
+            unique.append(path)
+    return unique
+
+
+def locate_cura_machine_definition(engine: Path | None = None) -> Path:
+    """Pick the ``-j`` definition: official V3 KE if present, else vendored."""
+    official_names = (
+        "creality_ender3v3ke.def.json",
+        "creality_ender3_v3_ke.def.json",
+        "creality_ender3v3se.def.json",
+    )
+    for directory in cura_resource_dirs(engine):
+        for name in official_names:
+            candidate = directory / name
+            if candidate.is_file() and directory != RESOURCES:
+                return candidate
+        # Glob looser official names (not the vendored copy).
+        if directory.resolve() != RESOURCES.resolve():
+            for candidate in sorted(directory.glob("creality*v3*ke*.def.json")):
+                if candidate.is_file():
+                    return candidate
+    vendored = RESOURCES / "creality_v3ke.def.json"
+    if vendored.is_file():
+        return vendored
+    fallback = RESOURCES / "fdmprinter.def.json"
+    if fallback.is_file():
+        return fallback
+    raise FileNotFoundError("No Cura machine definition (fdmprinter.def.json) found")
 
 
 def engine_available() -> bool:
@@ -125,58 +247,23 @@ class EngineSlicer:
         return layer
 
     def _run_cura(self, mesh: Path, out: Path, settings: SlicerSettings) -> None:
-        defs = RESOURCES / "fdmprinter.def.json"
-        if not defs.is_file():
-            raise FileNotFoundError(f"Missing Cura definition: {defs}")
-        machine = RESOURCES / "creality_v3ke.def.json"
-        definition = machine if machine.is_file() else defs
+        from layerstream_slicer.slicing.profile import profile_from_settings
+
+        engine_path = self.info.executable if self.info else None
+        definition = locate_cura_machine_definition(engine_path)
+        if not definition.is_file():
+            raise FileNotFoundError(f"Missing Cura definition: {definition}")
         env = os.environ.copy()
-        search = str(RESOURCES)
+        search_dirs = [str(path) for path in cura_resource_dirs(engine_path)]
         existing = env.get("CURA_ENGINE_SEARCH_PATH")
-        env["CURA_ENGINE_SEARCH_PATH"] = search if not existing else f"{search}:{existing}"
-        cmd = [
-            str(self.info.executable),
-            "slice",
-            "-j",
-            str(definition),
-            "-s",
-            f"machine_width={settings.extra.get('bed_width', V3KE_BED[0])}",
-            "-s",
-            f"machine_depth={settings.extra.get('bed_depth', V3KE_BED[1])}",
-            "-s",
-            f"machine_height={settings.extra.get('bed_height', V3KE_BED[2])}",
-            "-s",
-            "machine_gcode_flavor=RepRap (Marlin/Sprinter)",
-            "-s",
-            "machine_start_gcode=; LayerStream V3 KE start\\nG90\\nM82\\nG92 E0\\n",
-            "-s",
-            "machine_end_gcode=; LayerStream V3 KE end\\nG91\\nG1 E-2 F1800\\nG1 Z5 F600\\nG90\\n",
-            "-s",
-            f"layer_height={settings.layer_height}",
-            "-s",
-            f"layer_height_0={settings.layer_height}",
-            "-s",
-            f"wall_line_width_x={settings.line_width}",
-            "-s",
-            f"wall_line_width_0={settings.line_width}",
-            "-s",
-            f"line_width={settings.line_width}",
-            "-s",
-            "wall_line_count=2",
-            "-s",
-            "infill_sparse_density=20",
-            "-s",
-            "retraction_enable=True",
-            "-e0",
-            "-s",
-            f"machine_nozzle_size={settings.nozzle_diameter}",
-            "-s",
-            "material_diameter=1.75",
-            "-l",
-            str(mesh),
-            "-o",
-            str(out),
-        ]
+        if existing:
+            search_dirs.append(existing)
+        env["CURA_ENGINE_SEARCH_PATH"] = os.pathsep.join(search_dirs)
+        profile = profile_from_settings(settings)
+        cmd = [str(self.info.executable), "slice", "-j", str(definition)]
+        for key, value in profile.cura_setting_pairs():
+            cmd.extend(["-s", f"{key}={value}"])
+        cmd.extend(["-e0", "-l", str(mesh), "-o", str(out)])
         _run(cmd, env=env)
 
     def _run_prusaslicer(self, mesh: Path, out: Path, settings: SlicerSettings) -> None:

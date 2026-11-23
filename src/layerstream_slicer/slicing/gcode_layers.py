@@ -44,6 +44,22 @@ class SplitGCode:
                 return layer
         return None
 
+    def join(self, *, from_layer: int | None = None, include_postamble: bool | None = None) -> str:
+        """Reassemble G-code, optionally starting at a 1-based layer."""
+        parts: list[str] = []
+        start_at = from_layer or 1
+        if start_at <= 1 and self.preamble:
+            parts.append(self.preamble)
+        for layer in self.layers:
+            if layer.index >= start_at:
+                parts.append(layer.gcode)
+        use_post = self.postamble and (include_postamble if include_postamble is not None else True)
+        if use_post:
+            parts.append(self.postamble)
+        nl = chr(10)
+        body = nl.join(part.rstrip(nl) for part in parts if part).rstrip()
+        return body + (nl if parts else "")
+
 
 def split_gcode_layers(gcode: str) -> SplitGCode:
     """Parse Cura ``;LAYER:n`` or PrusaSlicer ``;LAYER_CHANGE`` marked G-code."""
