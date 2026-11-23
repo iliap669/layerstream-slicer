@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "layerstream-slicer"
+version = "0.1.0"
+description = "Web-based layer-by-layer G-code slicer that streams to a Creality V3 KE (Klipper) and supports mid-print model swaps."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "LayerStream Slicer contributors" }]
+keywords = ["slicer", "klipper", "moonraker", "3d-printing", "gcode"]
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.12",
+    "pyserial>=3.5",
+    "trimesh>=4.5",
+    "shapely>=2.0",
+    "httpx>=0.27",
+    "websockets>=14",
+    "numpy>=2.0",
+    "lxml>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+layerstream-slicer = "layerstream_slicer.api.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+layerstream_slicer = ["web/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

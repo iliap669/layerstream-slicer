@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LayerStream Slicer</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>LayerStream Slicer</h1>
+      <p>Layer-by-layer streaming for Creality V3 KE · mid-print model swap</p>
+    </header>
+    <main>
+      <section>
+        <h2>Model</h2>
+        <label for="model-file">Original STL / 3MF</label>
+        <input id="model-file" type="file" accept=".stl,.3mf" />
+        <div class="row">
+          <button id="upload-btn" type="button">Upload</button>
+        </div>
+        <label for="layer-count">Stub layer count</label>
+        <input id="layer-count" type="number" min="1" value="20" />
+        <label for="layer-height">Layer height (mm)</label>
+        <input id="layer-height" type="number" min="0.04" step="0.02" value="0.2" />
+        <div class="row">
+          <button id="start-btn" type="button">Start dry run</button>
+          <button id="pause-btn" class="secondary" type="button">Pause</button>
+          <button id="resume-btn" class="secondary" type="button">Resume</button>
+        </div>
+        <label for="revised-file">Revised model (swap)</label>
+        <input id="revised-file" type="file" accept=".stl,.3mf" />
+        <label for="from-layer">Swap from layer N</label>
+        <input id="from-layer" type="number" min="1" value="8" />
+        <div class="row">
+          <button id="swap-btn" type="button">Swap model</button>
+        </div>
+        <p class="hint">Moonraker and serial transports are stubs. This UI drives the fake dry-run transport.</p>
+      </section>
+      <section>
+        <h2>Layer preview</h2>
+        <label for="preview-layer">Layer</label>
+        <input id="preview-layer" type="number" min="1" value="1" />
+        <div class="row">
+          <button id="preview-btn" class="secondary" type="button">Draw current</button>
+          <button id="preview-revised-btn" class="secondary" type="button">Draw revised</button>
+        </div>
+        <canvas id="preview" width="640" height="640" aria-label="Layer cross-section preview"></canvas>
+      </section>
+      <section>
+        <h2>Status</h2>
+        <p>State: <span id="state" class="badge idle">idle</span></p>
+        <dl>
+          <dt>Job</dt><dd id="job-id">—</dd>
+          <dt>Layer</dt><dd id="current-layer">0</dd>
+          <dt>Swaps</dt><dd id="swap-count">0</dd>
+          <dt>Queue</dt><dd id="queue-depth">0</dd>
+        </dl>
+        <h2>Log</h2>
+        <div id="log"></div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
