@@ -1,4 +1,4 @@
-"""Model-diff detection: first differing layer and split-height support checks."""
+"""Model-diff detection, support checks, and transition geometry."""
 
 from layerstream_slicer.diff.detect import (
     DiffResult,
@@ -9,6 +9,12 @@ from layerstream_slicer.diff.detect import (
     load_mesh,
     support_at_split,
 )
+from layerstream_slicer.diff.transition import (
+    TransitionPlan,
+    TransitionSkin,
+    plan_transition,
+    plan_transition_at_split,
+)
 
 __all__ = [
     "DiffResult",
@@ -18,4 +24,8 @@ __all__ = [
     "layer_z_heights",
     "load_mesh",
     "support_at_split",
+    "TransitionPlan",
+    "TransitionSkin",
+    "plan_transition",
+    "plan_transition_at_split",
 ]
