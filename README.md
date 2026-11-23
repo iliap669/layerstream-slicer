@@ -4,7 +4,7 @@ A web-based slicer for the **Creality K1 / Ender-3 V3 KE** (Klipper + Moonraker)
 
 The headline feature is a **mid-print model swap**: while layers `1..N-1` are already on the bed, you upload a revised STL or 3MF. The backend diffs it against the in-progress model, and from a chosen layer `N` upward it streams new G-code, leaving the printed layers alone.
 
-This repository is the initial scaffold. Slicing engines, the real Moonraker/serial transports, transition geometry, and firmware resume are stubbed with explicit TODOs. A **fake dry-run transport** lets the streaming loop run end to end, and the diff module already compares meshes with `trimesh` + `shapely`.
+The streaming loop, model diff, **CuraEngine per-layer slicing** (Creality V3 KE profile), **Moonraker and serial transports**, **G-code seam stitch**, **Klipper resume preamble**, and **chamfer/support-skin transition geometry** are implemented. A **fake dry-run transport** is still available when no printer is connected. `StubSlicer` is used only when no engine is installed.
 
 ## Architecture
 
@@ -99,7 +99,13 @@ pytest
 layerstream-slicer   # http://127.0.0.1:8000  — dry-run UI
 ```
 
-The default start path uses `FakeTransport`. Moonraker and serial endpoints return HTTP 501 until those transports are implemented.
+The UI can start a **fake dry-run**, stream to a **Moonraker** host, or use a **serial** port. Layer preview can draw either a mesh cross-section or the sliced G-code toolpath. `GET /api/slicer` reports whether CuraEngine (or PrusaSlicer) is available.
+
+## Printer transports
+
+- **Moonraker** — HTTP `/printer/gcode/script` and `/printer/objects/query`, plus a websocket JSON-RPC session (`printer.objects.subscribe`, `notify_gcode_response`, `notify_status_update`) with automatic reconnect. Configure the host as `http://printer:7125` (default port 7125).
+- **Serial** — pyserial, line numbers + checksums, wait-for-`ok`, resend on timeout or `Resend: N`. DTR is held low so opening the port does not reset the MCU.
+- **Fake** — in-memory dry run used by tests and the default UI path.
 
 ## Streaming loop
 
@@ -115,14 +121,11 @@ The default start path uses `FakeTransport`. Moonraker and serial endpoints retu
 - `first_difference` reports the first Z (and layer) whose symmetric-difference area exceeds a tolerance.
 - `support_at_split` checks whether the **new** cross-section at the split height is covered by the **old** top surface. Unsupported area (`new.difference(old)`) sets `needs_transition=True`.
 
-## Main TODOs
+## What still is not a full slicer product
 
-- **Per-layer slicing** — wrap CuraEngine and/or libslic3r so a swap can reslice from layer `N` without redoing `1..N-1`.
-- **Transition geometry** — when `needs_transition`, auto-build chamfer / fillet / support skin (or flag the user and wait).
-- **G-code stitch** — real seam handling (retract/prime, wipe, Z-hop, extrusion-mode match) in `stitch/`.
-- **Firmware resume** — restore bed mesh (`BED_MESH_PROFILE LOAD=...`), temperatures, and position **without** `G28` / `FIRMWARE_RESTART`.
-- **MoonrakerTransport** — HTTP script send + websocket acknowledgements and queue depth.
-- **SerialTransport** — pyserial (do not toggle DTR in a way that resets the MCU).
+- Engines still slice the **whole mesh** and then we keep layers `N..end`; there is no native “slice only from layer N” hook in CuraEngine.
+- Transition skins are planned (polygons + flags) but not yet extruded back into the G-code stream automatically.
+- Moonraker/serial printer integration is implemented and tested against mocks; a live V3 KE still needs a reachable Moonraker or serial device.
 
 ## License
 

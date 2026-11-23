@@ -135,3 +135,25 @@ dd { margin: 0; font-variant-numeric: tabular-nums; }
   padding: 0.6rem;
   border: 1px solid var(--line);
 }
+
+select, input[type="text"] {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+}
+
+.report {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  background: #0b0d12;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+
+.report.warn { border-color: var(--warn); color: var(--warn); }
+.report.ok { border-color: var(--ok); }
