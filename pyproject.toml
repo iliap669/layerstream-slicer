@@ -36,7 +36,7 @@ layerstream-slicer = "layerstream_slicer.api.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-layerstream_slicer = ["web/*"]
+layerstream_slicer = ["web/*", "slicing/resources/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

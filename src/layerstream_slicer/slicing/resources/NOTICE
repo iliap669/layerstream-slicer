@@ -1,0 +1,4 @@
+fdmprinter.def.json and fdmextruder.def.json are copied from UltiMaker Cura
+5.0.0 (https://github.com/Ultimaker/Cura/tree/5.0.0/resources/definitions)
+and are used as CuraEngine machine definitions. Cura is licensed under
+LGPL-3.0; see that project for the full license text.
